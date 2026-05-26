@@ -1,0 +1,133 @@
+package dev.kxwie.studios.kxwieguard.naming.dictionary;
+
+import dev.kxwie.studios.kxwieguard.context.Context;
+import dev.kxwie.studios.kxwieguard.naming.Mappings;
+import dev.kxwie.studios.kxwieguard.tree.impl.JClass;
+
+
+public class AggressiveDictionary implements IDictionary {
+    private final Context context;
+    private final String dictionary;
+    private int classCounter = 0;
+
+    public AggressiveDictionary(Context context, String dictionary) {
+        this.context = context;
+        this.dictionary = dictionary;
+    }
+
+    @Override
+    public String newClassName(String prefix) {
+        var result = "";
+
+        do {
+            result = prefix + newName(classCounter++);
+        } while (isClassMapped(result));
+
+        return result;
+    }
+
+    @Override
+    public String newMethodName(String prefix, JClass owner, String desc) {
+        int counter = 0;
+        var result = "";
+
+        do {
+            result = prefix + newName(counter++);
+        } while (isMethodMapped(owner, result, desc));
+
+        return result;
+    }
+
+    @Override
+    public String newFieldName(String prefix, JClass owner, String desc) {
+        int counter = 0;
+        var result = "";
+
+        do {
+            result = prefix + newName(counter++);
+        } while (isFieldMapped(owner, result, desc));
+
+        return result;
+    }
+
+    @Override
+    public String newClassName() {
+        return newClassName("");
+    }
+
+    @Override
+    public String newMethodName(JClass owner, String desc) {
+        return newMethodName("", owner, desc);
+    }
+
+    @Override
+    public String newFieldName(JClass owner, String desc) {
+        return newFieldName("", owner, desc);
+    }
+
+    @Override
+    public String newName(int count) {
+        int base = dictionary.length();
+        var result = new StringBuilder();
+
+        for (int i = count; i >= 0; i = (i / base) - 1) {
+            int idx = i % base;
+            result.append(dictionary.charAt(idx));
+        }
+
+        return result.reverse().toString();
+    }
+
+    private boolean isClassMapped(String name) {
+        return context.hasJarClass(name) || Mappings.CLASS.containsNew(name);
+    }
+
+    private boolean isFieldMapped(JClass owner, String name, String desc) {
+        for(var member : owner.tree()) {
+            var mappedName = "%s.%s %s".formatted(member.name(), name, desc);
+            if(Mappings.FIELD.getMappings().values().stream().anyMatch(e -> e.key().equals(mappedName)))
+                return true;
+
+            if(member.fields().stream().anyMatch(e -> e.name().equals(name)))
+                return true;
+        }
+
+        var mappedName = "%s.%s %s".formatted(owner.name(), name, desc);
+        if(Mappings.FIELD.getMappings().values().stream().anyMatch(e -> e.key().startsWith(mappedName)))
+            return true;
+
+        return owner.fields().stream().anyMatch(e -> e.name().equals(name));
+    }
+
+    private boolean isMethodMapped(JClass owner, String name, String desc) {
+        for(var member : owner.tree()) {
+            var mappedName = "%s.%s%s".formatted(member.name(), name, desc);
+            if(Mappings.METHOD.getMappings().values().stream().anyMatch(e -> e.key().equals(mappedName)))
+                return true;
+
+            if(member.methods().stream().anyMatch(e -> e.name().equals(name)))
+                return true;
+        }
+
+        var mappedName = "%s.%s%s".formatted(owner.name(), name, desc);
+        if(Mappings.METHOD.getMappings().values().stream().anyMatch(e -> e.key().startsWith(mappedName)))
+            return true;
+
+        return owner.methods().stream().anyMatch(e -> e.name().equals(name));
+    }
+
+    @Override
+    public void revertClass() {
+        
+    }
+
+    @Override
+    public void revertMethod() {
+        
+    }
+
+    @Override
+    public void revertField() {
+        
+    }
+}

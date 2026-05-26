@@ -1,0 +1,156 @@
+package dev.kxwie.studios.kxwieguard.transform.impl.flow;
+
+import dev.kxwie.studios.kxwieguard.analysis.flow.graph.Block;
+import dev.kxwie.studios.kxwieguard.analysis.flow.graph.ControlFlowGraph;
+import dev.kxwie.studios.kxwieguard.analysis.interpreter.FrameString;
+import dev.kxwie.studios.kxwieguard.context.Context;
+import dev.kxwie.studios.kxwieguard.exclude.Exclusions;
+import dev.kxwie.studios.kxwieguard.property.Property;
+import dev.kxwie.studios.kxwieguard.transform.Setting;
+import dev.kxwie.studios.kxwieguard.transform.Transformer;
+import dev.kxwie.studios.kxwieguard.tree.impl.JMethod;
+import dev.kxwie.studios.kxwieguard.utils.ASMUtils;
+import dev.kxwie.studios.kxwieguard.utils.SwitchUtils;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.*;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiPredicate;
+
+
+public class ControlFlowFlatteningTransformer extends Transformer {
+    private final Setting<Boolean> useSalt = setting("useSalt", true);
+
+    private final BiPredicate<ControlFlowGraph, Block> goodBlock = (graph, block) -> {
+        if(block.inTrapHandler())   return false;
+        if(block.inTrapEnd())       return false;
+        if(block.expectsValue())    return false;
+
+        if(!block.start().isInitThis())
+            return false;
+
+        var method = graph.method();
+        return (!useSalt.value() || !method.hasSalt()) || method.canSalt(block);
+    };
+
+    public ControlFlowFlatteningTransformer() {
+        super("Control Flow Flattening", "controlFlowFlatten");
+    }
+
+    @Override
+    public void transform(Context context) {
+        for(var clazz : context.classes()) {
+            if(Exclusions.FLOW_FLATTEN.excluded(clazz))
+                continue;
+
+            for(var method : clazz.methods()) {
+                if(method.properties().has(Property.STRING_DECRYPTOR, Property.INTEGER_DECRYPTOR))
+                    continue;
+
+                if(Exclusions.FLOW_FLATTEN.excluded(method))
+                    continue;
+
+                var graph = method.createFlowGraph(context);
+                if(graph.isEmpty())
+                    continue;
+
+                fixLocals(method);
+                var grouped = grouped(graph);
+                int flattenerLocal = -1;
+
+                for(var group : grouped) {
+                    group = group.stream().filter(e -> goodBlock.test(graph, e)).toList();
+                    if(group.size() < 3)
+                        continue;
+
+                    if(flattenerLocal == -1) {
+                        flattenerLocal = method.allocVar(Type.INT_TYPE);
+
+                        var list = new InsnList();
+                        list.add(ASMUtils.pushInt(0));
+                        list.add(new VarInsnNode(ISTORE, flattenerLocal));
+
+                        method.insns().insert(list);
+                    }
+
+                    var dispatcher = new LabelNode();
+                    var cases = new HashMap<LabelNode, Integer>();
+
+                    for(var block : group) {
+                        var list = new InsnList();
+                        var lbl = new LabelNode();
+                        var key = uniqueInt(cases, method.hasSalt() ? method.salt().value() : Integer.MAX_VALUE);
+
+                        if(useSalt.value() && method.canSalt(block)) {
+                            list.add(method.salt().load());
+                            list.add(context.properties().add(ASMUtils.pushInt(key), Property.IGNORE_INTEGER));
+                            list.add(new InsnNode(IAND));
+                            key = method.salt().value() & key;
+                        } else {
+                            list.add(context.properties().add(ASMUtils.pushInt(key), Property.IGNORE_INTEGER));
+                        }
+
+                        list.add(new VarInsnNode(ISTORE, flattenerLocal));
+                        list.add(new JumpInsnNode(GOTO, dispatcher));
+                        list.add(lbl);
+
+                        cases.put(lbl, key);
+                        method.insns().insert(block.label(), list);
+                    }
+
+                    var list = new InsnList();
+                    list.add(dispatcher);
+                    list.add(new VarInsnNode(ILOAD, flattenerLocal));
+                    list.add(SwitchUtils.createLookupInvert(dispatcher, cases));
+
+                    method.insns().add(list);
+                }
+
+                markChange();
+            }
+        }
+    }
+
+    private int uniqueInt(Map<LabelNode, Integer> cases, int mask) {
+        int res;
+        do {
+            res = random.nextInt();
+        } while (cases.containsValue(res & mask));
+
+        return res;
+    }
+
+    private List<List<Block>> grouped(ControlFlowGraph graph) {
+        var map = new HashMap<String, List<Block>>();
+
+        for(var block : graph.blocks()) {
+            if(block.start() == null)
+                continue;
+
+            map.computeIfAbsent(FrameString.generate(block.start()), _ -> new ArrayList<>()).add(block);
+        }
+
+        return map.values().stream().toList();
+    }
+
+    private void fixLocals(JMethod method) {
+        int maxUsed = 0;
+        for(var insn : method.insns()) {
+            if(insn instanceof VarInsnNode v) {
+                var isCategoryTwo = v.getOpcode() == LLOAD || v.getOpcode() == LSTORE
+                        || v.getOpcode() == DLOAD || v.getOpcode() == DSTORE;
+
+                var slots = isCategoryTwo ? 2 : 1;
+                maxUsed = Math.max(maxUsed, v.var + slots);
+            } else if(insn instanceof IincInsnNode v) {
+                maxUsed = Math.max(maxUsed, v.var + 1);
+            }
+        }
+
+        if(maxUsed > method.maxLocals())
+            method.setMaxLocals(maxUsed);
+    }
+}

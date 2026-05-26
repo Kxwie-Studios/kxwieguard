@@ -1,0 +1,71 @@
+{
+  "in": "in.jar",
+  "out": "out.jar",
+  "libs": "libs/",
+  "dictionary": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  "computeFrames": true,
+  "watermark": "",
+  "aggressiveOverload": true,
+  "transformers": {
+    "trim": {
+      "enabled": true,
+      "classes": true,
+      "fields": true,
+      "methods": true
+    },
+    "renameFields": {
+      "enabled": true,
+      "preserveRecordNames": true,
+      "prefix": "",
+      "shuffle": true
+    },
+    "renameMethods": {
+      "enabled": true,
+      "prefix": "",
+      "shuffle": true
+    },
+    "renameClasses": {
+      "enabled": true,
+      "prefix": "",
+      "randomize": true
+    },
+    "localNames": {
+      "enabled": true
+    },
+    "lineNumbers": {
+      "enabled": true,
+      "remove": true
+    },
+    "methodSalting": {
+      "enabled": true
+    },
+    "classSalting": {
+      "enabled": true,
+      "unifyAccess": true
+    },
+    "fixConstants": {
+      "enabled": true
+    },
+    "integerEncrypt": {
+      "enabled": true
+    },
+    "encryptStrings": {
+      "enabled": true,
+      "translateConcat": true,
+      "minLength": 2
+    },
+    "controlFlowFlatten": {
+      "enabled": true,
+      "useSalt": true
+    },
+    "controlFlowShuffle": {
+      "enabled": true
+    },
+    "cleanDeadCode": {
+      "enabled": true
+    },
+    "referenceObfuscate": {
+      "enabled": true
+    }
+  }
+}

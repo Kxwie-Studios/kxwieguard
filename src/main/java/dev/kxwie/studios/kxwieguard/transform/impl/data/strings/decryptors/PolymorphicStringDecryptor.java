@@ -1,0 +1,268 @@
+package dev.kxwie.studios.kxwieguard.transform.impl.data.strings.decryptors;
+
+import dev.kxwie.studios.kxwieguard.analysis.interpreter.SimpleFrame;
+import dev.kxwie.studios.kxwieguard.context.Context;
+import dev.kxwie.studios.kxwieguard.polymorph.IntMask;
+import dev.kxwie.studios.kxwieguard.polymorph.IntPolymorphStack;
+import dev.kxwie.studios.kxwieguard.polymorph.impl.AddMask;
+import dev.kxwie.studios.kxwieguard.polymorph.impl.SubMask;
+import dev.kxwie.studios.kxwieguard.polymorph.impl.XorMask;
+import dev.kxwie.studios.kxwieguard.property.Property;
+import dev.kxwie.studios.kxwieguard.transform.impl.data.strings.IStringDecryptor;
+import dev.kxwie.studios.kxwieguard.tree.impl.JClass;
+import dev.kxwie.studios.kxwieguard.tree.impl.JMethod;
+import dev.kxwie.studios.kxwieguard.utils.ASMUtils;
+import dev.kxwie.studios.kxwieguard.utils.InsnBuilder;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.*;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
+
+public class PolymorphicStringDecryptor implements IStringDecryptor {
+    private String name;
+    private final int idxXor, traceXor;
+    private final IntPolymorphStack stack;
+    private final List<Arg> args = new ArrayList<>(List.of(
+            Arg.INDEX, Arg.KEY1, Arg.KEY2)
+    );
+
+    public PolymorphicStringDecryptor() {
+        this.idxXor = random.nextInt(Character.MAX_VALUE);
+        this.traceXor = random.nextInt(Short.MAX_VALUE);
+
+        this.stack = new IntPolymorphStack();
+        int masks = random.nextInt(3, 10) + 1;
+
+        List<Supplier<IntMask<?>>> types = List.of(
+                () -> new XorMask().ofRandomValue(Character.MAX_VALUE),
+                () -> new SubMask().ofRandomValue(Character.MAX_VALUE),
+                () -> new AddMask().ofRandomValue(Character.MAX_VALUE)
+        );
+
+        for(int i = 0; i < masks; i++) {
+            stack.push(types.get(random.nextInt(types.size())).get());
+        }
+        args.forEach(Arg::reset);
+        Collections.shuffle(args);
+    }
+
+    @Override
+    public void generate(Context context, JClass clazz, String fieldName, String cacheName) {
+        var method = clazz.createMethod(ACC_PRIVATE | ACC_STATIC, name, getDescriptor());
+
+        
+        var idxValVar = -1; 
+        var xorValueVar = -1; 
+        var keyParamVar = -1; 
+
+        for(var arg : args) {
+            switch (arg) {
+                case INDEX -> idxValVar = method.allocVar(Type.INT_TYPE);
+                case KEY1 -> xorValueVar = method.allocVar(Type.INT_TYPE);
+                case KEY2 -> keyParamVar = method.allocVar(Type.INT_TYPE);
+            }
+        }
+
+        var idxVar = method.allocVar(Type.INT_TYPE);
+        var charArrVar = method.allocVar();
+        var cachedTraceVar = method.allocVar();
+        var stackElementsVar = method.allocVar();
+        var elementVar = method.allocVar();
+        var hashVar = method.allocVar(Type.INT_TYPE);
+        var iVar = method.allocVar(Type.INT_TYPE);
+        var valueVar = method.allocVar(Type.INT_TYPE);
+
+        
+        var loop = new LabelNode();
+        var newTraceLabel = new LabelNode();
+        var exitLabel = new LabelNode();
+
+        var body = new InsnBuilder(method.insns())
+                .label(new LabelNode())
+                ._var(ILOAD, idxValVar)
+                .add(context.properties().add(ASMUtils.pushInt(idxXor), Property.IGNORE_INTEGER))
+                .ixor()
+                ._var(ISTORE, idxVar)
+
+                .label(new LabelNode())
+                .field(GETSTATIC, clazz.name(), fieldName, "[Ljava/lang/String;")
+                ._var(ILOAD, idxVar)
+                .aaload()
+                .method(INVOKEVIRTUAL, "java/lang/String", "toCharArray", "()[C")
+                ._var(ASTORE, charArrVar)
+
+                .label(new LabelNode())
+                .field(GETSTATIC, clazz.name(), cacheName, "[Ljava/lang/Object;")
+                ._var(ILOAD, idxVar)
+                .aaload()
+                .type(CHECKCAST, "[Ljava/lang/StackTraceElement;")
+                ._var(ASTORE, cachedTraceVar)
+
+                .label(new LabelNode())
+                ._var(ALOAD, cachedTraceVar)
+                .jump(IFNULL, newTraceLabel)
+
+                .label(new LabelNode())
+                ._var(ALOAD, cachedTraceVar)
+                ._var(ASTORE, stackElementsVar)
+                ._goto(exitLabel)
+
+                .label(newTraceLabel)
+                .type(NEW, "java/lang/Throwable")
+                .dup()
+                .method(INVOKESPECIAL, "java/lang/Throwable", "<init>", "()V")
+                .method(INVOKEVIRTUAL, "java/lang/Throwable", "getStackTrace", "()[Ljava/lang/StackTraceElement;")
+                ._var(ASTORE, stackElementsVar)
+
+                .label(new LabelNode())
+                .field(GETSTATIC, clazz.name(), cacheName, "[Ljava/lang/Object;")
+                ._var(ILOAD, idxVar)
+                ._var(ALOAD, stackElementsVar)
+                .aastore()
+                .label(exitLabel)
+                ._var(ALOAD, stackElementsVar)
+                ._const(1)
+                .aaload()
+                ._var(ASTORE, elementVar)
+
+                .label(new LabelNode())
+                ._var(ALOAD, elementVar)
+                .method(INVOKEVIRTUAL, "java/lang/StackTraceElement", "getClassName", "()Ljava/lang/String;")
+                .method(INVOKEVIRTUAL, "java/lang/String", "hashCode", "()I")
+                ._var(ALOAD, elementVar)
+                .method(INVOKEVIRTUAL, "java/lang/StackTraceElement", "getMethodName", "()Ljava/lang/String;")
+                .method(INVOKEVIRTUAL, "java/lang/String", "hashCode", "()I")
+                .ixor()
+                ._const(16)
+                .ishr()
+                ._const(traceXor)
+                .ixor()
+                ._var(ISTORE, hashVar)
+
+                .label(new LabelNode())
+                ._int(0)
+                ._var(ISTORE, iVar)
+
+                .label(loop)
+                ._var(ALOAD, charArrVar)
+                ._var(ILOAD, iVar)
+                .dup2()
+                .caload();
+
+        body.add(stack.dumpWithList(() -> new InsnBuilder()._var(ISTORE, valueVar)._var(ILOAD, valueVar).result()));
+
+        body._var(ILOAD, hashVar)
+                .ixor()
+                ._var(ILOAD, xorValueVar)
+                .ixor()
+                ._var(ILOAD, keyParamVar)
+                .add(context.properties().add(ASMUtils.pushInt(16), Property.IGNORE_INTEGER))
+                .ishr()
+                .ixor()
+
+                .i2c()
+                .castore()
+
+                .label(new LabelNode())
+                .iinc(iVar, 1)
+
+                .label(new LabelNode())
+                ._var(ILOAD, iVar)
+                ._var(ALOAD, charArrVar)
+                .arraylength()
+                .jump(IF_ICMPLT, loop)
+
+                .label(new LabelNode())
+                .type(NEW, "java/lang/String")
+                .dup()
+                ._var(ALOAD, charArrVar)
+                .method(INVOKESPECIAL, "java/lang/String", "<init>", "([C)V")
+                .method(INVOKEVIRTUAL, "java/lang/String", "intern", "()Ljava/lang/String;")
+                ._areturn()
+
+                ;
+    }
+
+    @Override
+    public InsnList addAndCall(Context context, JMethod method, AbstractInsnNode callSite, Map<AbstractInsnNode, SimpleFrame> frames, List<String> strings, String str) {
+        
+        var callerClass = method.owner().name().replace('/', '.');
+        var callerMethod = method.name();
+        var traceKey = ((callerClass.hashCode() ^ callerMethod.hashCode()) >> 16) ^ traceXor;
+        var key = method.hasSalt() ? method.salt().value() >> 16 : random.nextInt() >> 16;
+        var idx = strings.size();
+
+        var idxVal = idx ^ idxXor;
+        var firstKey = random.nextInt(Character.MAX_VALUE);
+
+        var list = new InsnList();
+        for(var arg : args) {
+            switch (arg) {
+                case INDEX -> list.add(context.properties().add(ASMUtils.pushInt(idxVal), Property.IGNORE_INTEGER));
+                case KEY1 -> list.add(context.properties().add(ASMUtils.pushInt(firstKey), Property.IGNORE_INTEGER));
+                case KEY2 -> {
+                    if(method.canSalt(frames.get(callSite))) {
+                        var mask = method.seed();
+                        var masked = method.salt().value() & mask;
+
+                        list.add(method.salt().load());
+                        list.add(context.properties().add(ASMUtils.pushInt(mask), Property.IGNORE_INTEGER));
+                        list.add(new InsnNode(IAND));
+                        list.add(context.properties().add(ASMUtils.pushInt(masked ^ (key << 16)), Property.IGNORE_INTEGER));
+                        list.add(new InsnNode(IXOR));
+                    } else {
+                        list.add(context.properties().add(ASMUtils.pushInt((key << 16) | random.nextInt(Short.MAX_VALUE)) , Property.IGNORE_INTEGER));
+                    }
+                }
+            }
+        }
+        list.add(context.properties().add(new MethodInsnNode(INVOKESTATIC, method.owner().name(), name, getDescriptor(), method.owner().isInterface()), Property.IGNORE_REF_OBFUSCATION));
+
+        var chars = str.toCharArray();
+        for(int i = 0; i < chars.length; i++) {
+            chars[i] = (char) (chars[i] ^ traceKey ^ firstKey ^ key);
+            chars[i] = (char) stack.applyInverse(chars[i]);
+        }
+
+        strings.add(new String(chars));
+        return list;
+    }
+
+    @Override
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public String getDescriptor() {
+        var format = new StringBuilder("(");
+        for(var arg : args) {
+            format.append(arg.type());
+        }
+        return format + ")Ljava/lang/String;";
+    }
+
+    private enum Arg {
+        INDEX("CCCI"), KEY1("CCSSSI"), KEY2("I");
+        private final String possibleTypes;
+        private String type;
+
+        Arg(String possibleTypes) {
+            this.possibleTypes = possibleTypes;
+            reset();
+        }
+
+        public String type() {
+            return type;
+        }
+
+        public void reset() {
+            this.type = String.valueOf(possibleTypes.charAt(random.nextInt(possibleTypes.length())));
+        }
+    }
+}
