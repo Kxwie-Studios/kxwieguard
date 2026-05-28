@@ -29,7 +29,9 @@ public enum Exclusions {
     STRING_ENCRYPTION("stringEncrypt", true, false, true),
 
     FLOW_FLATTEN("controlFlowFlatten", true, false, true),
-    FLOW_SHUFFLE("controlFlowShuffle", true, false, true)
+    FLOW_SHUFFLE("controlFlowShuffle", true, false, true),
+    BOGUS_JUMP("bogusJumps", true, false, true),
+    EXCEPTION_FLOW("exceptionFlow", true, false, true)
 
     ;
 

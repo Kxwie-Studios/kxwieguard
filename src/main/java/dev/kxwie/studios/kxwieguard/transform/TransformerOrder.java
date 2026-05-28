@@ -4,12 +4,15 @@ import dev.kxwie.studios.kxwieguard.transform.impl.data.ConstantsFixTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.data.ints.IntegerEncryptTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.data.strings.StringEncryptTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.dynamic.ReferenceObfuscationTransformer;
+import dev.kxwie.studios.kxwieguard.transform.impl.flow.BogusJumpTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.flow.ControlFlowFlatteningTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.flow.ControlFlowShufflingTransformer;
+import dev.kxwie.studios.kxwieguard.transform.impl.flow.ExceptionFlowTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.optimize.DeadCodeCleanTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.optimize.TrimTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.rename.ClassRenameTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.rename.FieldRenameTransformer;
+import dev.kxwie.studios.kxwieguard.transform.impl.rename.MethodParameterObfuscationTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.rename.MethodRenameTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.salt.ClassSaltTransformer;
 import dev.kxwie.studios.kxwieguard.transform.impl.salt.MethodSaltTransformer;
@@ -34,12 +37,16 @@ public final class TransformerOrder {
             new MethodSaltTransformer(),
             new ClassSaltTransformer(),
 
+            new MethodParameterObfuscationTransformer(),
+
             new ConstantsFixTransformer(),
             new IntegerEncryptTransformer(),
             new StringEncryptTransformer(),
 
             new ControlFlowFlatteningTransformer(),
             new ControlFlowShufflingTransformer(),
+            new BogusJumpTransformer(),
+            new ExceptionFlowTransformer(),
             new DeadCodeCleanTransformer(),
             new ReferenceObfuscationTransformer()
     );
