@@ -12,23 +12,13 @@ A modern, high-performance bytecode obfuscator for Java 21+ built on the powerfu
 
 ### 🚀 Key Features
 
-* 📦 **Structural Obfuscation**
-  * Aggressive class, field, and method renaming.
-  * Overloaded signatures and custom dictionary support.
-  
-* 🔀 **Control Flow Protection**
-  * Complex control flow flattening into switch state-machines.
-  * Control flow block shuffling to destroy linearity.
-
-* 🔒 **Data & String Cryptography**
-  * Dynamic string encryption with anti-tamper security.
-  * Polymorphic integer encryption to mask numeric values.
-
-* 🧂 **Instruction Salting**
-  * Custom class and method instruction salting to defeat signature matching.
-
-* 🧹 **Metadata Stripping**
-  * Full LocalVariableTable (LVT) clearing and LineNumberTable (LNT) mutation.
+| Category | Features |
+| :--- | :--- |
+| 📦 **Structural** | Class, field & method renaming · overloaded signatures · custom dictionaries |
+| 🔀 **Control Flow** | Switch state-machine flattening · block shuffling |
+| 🔒 **Cryptography** | Dynamic string encryption · polymorphic integer encryption |
+| 🧂 **Salting** | Instruction salting to defeat signature matching |
+| 🧹 **Metadata** | LVT clearing · LNT mutation |
 
 ---
 
